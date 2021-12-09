@@ -147,9 +147,6 @@ func (r *Raft) handleHeartbeat(m pb.Message) {
 		if m.Term >= r.Term {
 			r.becomeFollower(m.Term, m.From)
 		}
-		if m.Commit > r.RaftLog.committed {
-			r.RaftLog.committed = min(m.Commit, r.RaftLog.LastIndex())
-		}
 		r.sendHeartbeatResponse(m, false)
 		return
 	}
