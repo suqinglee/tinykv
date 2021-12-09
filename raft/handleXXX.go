@@ -74,6 +74,7 @@ func (r *Raft) handleAppendEntriesResponse(m pb.Message) {
 	if r.State != StateLeader {return}
 	if m.Reject {
 		r.Prs[m.From].Next = max(1, r.Prs[m.From].Next - 1)
+		r.sendAppend(m.From)
 	} else {
 		r.Prs[m.From] = &Progress{
 			Match: m.Index,
@@ -88,6 +89,7 @@ func (r *Raft) handleAppendEntriesResponse(m pb.Message) {
 		logTerm, _ := r.RaftLog.Term(majority)
 		if majority > r.RaftLog.committed && logTerm == r.Term {
 			r.RaftLog.committed = majority
+			r.bcastAppend()
 		}
 	}
 }
