@@ -58,10 +58,13 @@ func newLog(storage Storage) *RaftLog {
 	// Your Code Here (2A).
 	l := &RaftLog{
 		storage: storage,
-		committed: 0,
-		applied: 0,
-		entries: make([]pb.Entry, 1),
 	}
+	lo, _ := l.storage.FirstIndex()
+	hi, _ := l.storage.LastIndex()
+	entries, _ := l.storage.Entries(lo, hi+1)
+	term, _ := l.storage.Term(lo-1)
+	l.entries = append([]pb.Entry{{Index: lo-1, Term: term}}, entries...)
+	l.applied = lo-1
 	return l
 }
 
@@ -84,16 +87,18 @@ func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	return nil
 }
 
-func (l *RaftLog) sendEnts(next uint64) (ents []*pb.Entry) {
-	for i := next; i <= l.LastIndex(); i++ {
-		ents = append(ents, &l.entries[i])
+func (l *RaftLog) sendEnts(start uint64) (ents []*pb.Entry) {
+	for i := start; i <= l.LastIndex(); i++ {
+		ents = append(ents, &l.entries[i-l.entries[0].Index])
 	}
 	return ents
 }
 
-func (l *RaftLog) replaceTail(next uint64, ents []*pb.Entry) {
-	l.entries = l.entries[:next]
-	for _, ent := range ents {
+func (l *RaftLog) replaceTail(term uint64, start uint64, ents []*pb.Entry) {
+	l.entries = l.entries[:start-l.entries[0].Index]
+	for i, ent := range ents {
+		ent.Index = start + uint64(i)
+		ent.Term = term
 		l.entries = append(l.entries, *ent)
 	}
 }
@@ -101,11 +106,11 @@ func (l *RaftLog) replaceTail(next uint64, ents []*pb.Entry) {
 // LastIndex return the last index of the log entries
 func (l *RaftLog) LastIndex() uint64 {
 	// Your Code Here (2A).
-	return 0
+	return l.entries[len(l.entries)-1].Index
 }
 
 // Term return the term of the entry in the given index
 func (l *RaftLog) Term(i uint64) (uint64, error) {
 	// Your Code Here (2A).
-	return 0, nil
+	return l.entries[i-l.entries[0].Index].Term, nil
 }
