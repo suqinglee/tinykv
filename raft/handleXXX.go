@@ -54,6 +54,7 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 				r.RaftLog.entries = append(r.RaftLog.entries, *e)
 			} else {
 				if r.RaftLog.entries[j].Term != e.Term {
+					r.RaftLog.stabled = min(j+r.RaftLog.FirstIndex()-1, r.RaftLog.stabled)
 					r.RaftLog.entries = append(r.RaftLog.entries[:j], *e)
 				} else {
 					r.RaftLog.entries[j] = *e

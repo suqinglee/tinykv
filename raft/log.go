@@ -83,13 +83,16 @@ func (l *RaftLog) maybeCompact() {
 // unstableEntries return all the unstable entries
 func (l *RaftLog) unstableEntries() []pb.Entry {
 	// Your Code Here (2A).
+	if l.stabled+1 < l.FirstIndex() || l.stabled+1 > l.LastIndex() {
+		return []pb.Entry{}
+	}
 	return l.entries[l.stabled-l.FirstIndex()+1:]
 }
 
 // nextEnts returns all the committed but not applied entries
 func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	// Your Code Here (2A).
-	return nil
+	return l.entries[l.applied-l.FirstIndex()+1:l.committed-l.FirstIndex()+1]
 }
 
 // LastIndex return the last index of the log entries
@@ -124,7 +127,7 @@ func (l *RaftLog) Term(i uint64) (uint64, error) {
 		return l.storage.Term(i)
 	}
 	j := i - l.FirstIndex()
-	if j > uint64(len(l.entries)) {
+	if j >= uint64(len(l.entries)) {
 		return 0, errors.New("out of range")
 	}
 	return l.entries[j].Term, nil
