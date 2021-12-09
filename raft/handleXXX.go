@@ -62,7 +62,8 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 			}
 		}
 		if m.Commit > r.RaftLog.committed {
-			r.RaftLog.committed = min(m.Commit, r.RaftLog.LastIndex())
+			// may equal m.Index+uint64(len(m.Entries)), for TestHandleMessageType_MsgAppend2AB i = 7
+			r.RaftLog.committed = min(min(m.Commit, m.Index+uint64(len(m.Entries))), r.RaftLog.LastIndex())
 		}
 		r.sendAppendResponse(m, false)
 		return
