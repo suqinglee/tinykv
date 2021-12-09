@@ -62,6 +62,7 @@ func (r *Raft) sendHeartbeat(to uint64) {
 		To: to,
 		From: r.id,
 		Term: r.Term,
+		Commit: r.RaftLog.committed,
 	})
 }
 
@@ -72,5 +73,6 @@ func (r *Raft) sendHeartbeatResponse(m pb.Message, reject bool) {
 		From: r.id,
 		Term: r.Term,
 		Reject: reject,
+		Commit: r.RaftLog.committed,
 	})
 }

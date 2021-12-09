@@ -89,7 +89,7 @@ func (r *Raft) handleAppendEntriesResponse(m pb.Message) {
 		logTerm, _ := r.RaftLog.Term(majority)
 		if majority > r.RaftLog.committed && logTerm == r.Term {
 			r.RaftLog.committed = majority
-			r.bcastAppend()
+			r.bcastAppend()	// sync committed to followers, for TestLeaderSyncFollowerLog2AB
 		}
 	}
 }
@@ -146,6 +146,9 @@ func (r *Raft) handleHeartbeat(m pb.Message) {
 		if m.Term >= r.Term {
 			r.becomeFollower(m.Term, m.From)
 		}
+		if m.Commit > r.RaftLog.committed {
+			r.RaftLog.committed = min(m.Commit, r.RaftLog.LastIndex())
+		}
 		r.sendHeartbeatResponse(m, false)
 		return
 	}
@@ -156,6 +159,8 @@ func (r *Raft) handleHeartbeatResponse(m pb.Message) {
 	if r.State != StateLeader {return}
 	if m.Reject {
 		r.becomeFollower(m.Term, m.From)
+	} else if m.Commit < r.RaftLog.committed {
+		r.sendAppend(m.From) // sync committed with heartbeat, for TestCommitWithHeartbeat2AB
 	}
 }
 
