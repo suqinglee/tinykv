@@ -35,13 +35,6 @@ func (r *Raft) becomeLeader() {
 			Match: 0,
 		}
 	}
-	r.RaftLog.entries = append(r.RaftLog.entries, pb.Entry{
-		Term: r.Term,
-		Index: r.RaftLog.LastIndex() + 1,
-	})
-	r.Prs[r.id] = &Progress{
-		Next: r.RaftLog.LastIndex() + 1,
-		Match: r.RaftLog.LastIndex(),
-	}
-	r.bcastAppend()
+
+	r.Step(pb.Message{MsgType: pb.MessageType_MsgPropose, Entries: []*pb.Entry{{}}})
 }
