@@ -171,7 +171,7 @@ func (rn *RawNode) Ready() Ready {
 		rn.softState = softState
 	}
 	msgs := rn.Raft.msgs
-	rn.Raft.msgs = nil
+	//rn.Raft.msgs = nil
 	return Ready{
 		SoftState: softState,
 		HardState: hardState,
@@ -214,6 +214,7 @@ func (rn *RawNode) Advance(rd Ready) {
 	if len(rd.CommittedEntries) > 0 {
 		rn.Raft.RaftLog.applied = rd.CommittedEntries[len(rd.CommittedEntries)-1].Index
 	}
+	rn.Raft.msgs = nil
 }
 
 // GetProgress return the Progress of this node and its peers, if this
