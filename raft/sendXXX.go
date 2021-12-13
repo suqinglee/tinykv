@@ -16,7 +16,7 @@ func (r *Raft) sendAppend(to uint64) {
 		Commit: r.RaftLog.committed,
 	}
 	msg.LogTerm, _ = r.RaftLog.Term(msg.Index)
-	for i := r.Prs[to].Next; i <= r.RaftLog.LastIndex(); i++ {
+	for i := r.Prs[to].Next; i >= r.RaftLog.FirstIndex() && i <= r.RaftLog.LastIndex(); i++ {
 		j := i - r.RaftLog.FirstIndex()
 		msg.Entries = append(msg.Entries, &r.RaftLog.entries[j])
 	}
