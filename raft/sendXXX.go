@@ -18,7 +18,10 @@ func (r *Raft) sendAppend(to uint64) {
 	msg.LogTerm, err = r.RaftLog.Term(msg.Index)
 	if err == ErrCompacted || err == ErrUnavailable && r.RaftLog.pendingSnapshot != nil {
 		if IsEmptySnap(r.RaftLog.pendingSnapshot) {
-			snapshot, _ := r.RaftLog.storage.Snapshot()
+			snapshot, err := r.RaftLog.storage.Snapshot()
+			if err != nil {
+				return
+			}
 			msg.Snapshot = &snapshot
 		} else {
 			msg.Snapshot = r.RaftLog.pendingSnapshot

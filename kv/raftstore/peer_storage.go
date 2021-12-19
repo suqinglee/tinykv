@@ -338,6 +338,28 @@ func (ps *PeerStorage) ApplySnapshot(snapshot *eraftpb.Snapshot, kvWB *engine_ut
 	// and send RegionTaskApply task to region worker through ps.regionSched, also remember call ps.clearMeta
 	// and ps.clearExtraData to delete stale data
 	// Your Code Here (2C).
+	ps.clearMeta(kvWB, raftWB)
+	ps.clearExtraData(snapData.Region)
+	ps.raftState.LastTerm = snapshot.Metadata.Term
+	ps.raftState.LastIndex = snapshot.Metadata.Index
+	ps.applyState.AppliedIndex = snapshot.Metadata.Index
+	ps.applyState.TruncatedState.Index = snapshot.Metadata.Index
+	ps.applyState.TruncatedState.Term = snapshot.Metadata.Term
+	ps.snapState.StateType = snap.SnapState_Applying
+	meta.WriteRegionState(kvWB, snapData.Region, rspb.PeerState_Normal)
+	kvWB.SetMeta(meta.ApplyStateKey(snapData.Region.Id), ps.applyState)
+	raftWB.SetMeta(meta.RaftStateKey(snapData.Region.Id), ps.raftState)
+	ch := make(chan bool, 1)
+	ps.regionSched <- &runner.RegionTaskApply{
+		RegionId: snapData.Region.Id,
+		Notifier: ch,
+		SnapMeta: snapshot.Metadata,
+		StartKey: snapData.Region.StartKey,
+		EndKey: snapData.Region.EndKey,
+	}
+	if r := <-ch; r {
+		return &ApplySnapResult{PrevRegion: ps.region, Region: snapData.Region}, nil
+	}
 	return nil, nil
 }
 
@@ -347,15 +369,21 @@ func (ps *PeerStorage) SaveReadyState(ready *raft.Ready) (*ApplySnapResult, erro
 	// Hint: you may call `Append()` and `ApplySnapshot()` in this function
 	// Your Code Here (2B/2C).
 	raftWB := &engine_util.WriteBatch{}
+	var result *ApplySnapResult
+	if !raft.IsEmptySnap(&ready.Snapshot) {
+		kvWB := &engine_util.WriteBatch{}
+		result, _ = ps.ApplySnapshot(&ready.Snapshot, kvWB, raftWB)
+		kvWB.WriteToDB(ps.Engines.Kv)
+	}
 	ps.Append(ready.Entries, raftWB)
 
 	if !raft.IsEmptyHardState(ready.HardState) {
 		ps.raftState.HardState = &ready.HardState
 	}
-
 	raftWB.SetMeta(meta.RaftStateKey(ps.region.Id), ps.raftState)
 	raftWB.WriteToDB(ps.Engines.Raft)
-	return nil, nil
+
+	return result, nil
 }
 
 func (ps *PeerStorage) ClearData() {

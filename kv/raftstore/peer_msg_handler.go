@@ -5,6 +5,7 @@ import (
 	"github.com/pingcap-incubator/tinykv/kv/raftstore/meta"
 	"github.com/pingcap-incubator/tinykv/kv/util/engine_util"
 	"github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
+	"reflect"
 	"time"
 
 	"github.com/Connor1996/badger/y"
@@ -46,8 +47,11 @@ func (d *peerMsgHandler) HandleRaftReady() {
 		return
 	}
 	ready := d.RaftGroup.Ready()
-	d.peerStorage.SaveReadyState(&ready)
+	result, _ := d.peerStorage.SaveReadyState(&ready)
 
+	if result != nil && !reflect.DeepEqual(result.PrevRegion, result.Region) {
+		d.peerStorage.SetRegion(result.Region)
+	}
 	if len(ready.Messages) != 0 {
 		d.Send(d.ctx.trans, ready.Messages)
 	}
@@ -68,11 +72,26 @@ func (d *peerMsgHandler) HandleRaftReady() {
 func (d *peerMsgHandler) apply(e *eraftpb.Entry) {
 	msg := &raft_cmdpb.RaftCmdRequest{}
 	msg.Unmarshal(e.Data)
+	kvWB := &engine_util.WriteBatch{}
+
+	if msg.AdminRequest != nil {
+		switch msg.AdminRequest.CmdType {
+		case raft_cmdpb.AdminCmdType_CompactLog:
+			compactLog := msg.AdminRequest.GetCompactLog()
+			if compactLog.CompactIndex > d.peerStorage.applyState.TruncatedState.Index {
+				d.peerStorage.applyState.TruncatedState.Index = compactLog.CompactIndex
+				d.peerStorage.applyState.TruncatedState.Term = compactLog.CompactTerm
+				kvWB.SetMeta(meta.ApplyStateKey(d.regionId), d.peerStorage.applyState)
+				kvWB.WriteToDB(d.peerStorage.Engines.Kv)
+				d.ScheduleCompactLog(compactLog.CompactIndex)
+			}
+		}
+	}
+
 	if len(msg.Requests) == 0 {
 		return
 	}
 
-	kvWB := &engine_util.WriteBatch{}
 	for _, req := range msg.Requests {
 		switch req.CmdType {
 		case raft_cmdpb.CmdType_Put:
@@ -181,11 +200,13 @@ func (d *peerMsgHandler) proposeRaftCommand(msg *raft_cmdpb.RaftCmdRequest, cb *
 		return
 	}
 	// Your Code Here (2B).
-	d.proposals = append(d.proposals, &proposal{
-		index: d.nextProposalIndex(),
-		term: d.Term(),
-		cb: cb,
-	})
+	if cb != nil {
+		d.proposals = append(d.proposals, &proposal{
+			index: d.nextProposalIndex(),
+			term: d.Term(),
+			cb: cb,
+		})
+	}
 	data, _ := msg.Marshal()
 	d.RaftGroup.Propose(data)
 }

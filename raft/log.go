@@ -96,7 +96,10 @@ func (l *RaftLog) unstableEntries() []pb.Entry {
 // nextEnts returns all the committed but not applied entries
 func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	// Your Code Here (2A).
-	return l.entries[l.applied-l.FirstIndex()+1:l.committed-l.FirstIndex()+1]
+	if len(l.entries) > 0 {
+		return l.entries[l.applied-l.FirstIndex()+1:l.committed-l.FirstIndex()+1]
+	}
+	return nil
 }
 
 // LastIndex return the last index of the log entries
@@ -127,9 +130,6 @@ func (l *RaftLog) FirstIndex() uint64 {
 // Term return the term of the entry in the given index
 func (l *RaftLog) Term(i uint64) (uint64, error) {
 	// Your Code Here (2A).
-	if l.pendingSnapshot != nil && i == l.pendingSnapshot.Metadata.Index {
-		return l.pendingSnapshot.Metadata.Term, nil
-	}
 	if len(l.entries) == 0 || i < l.FirstIndex() {
 		return l.storage.Term(i)
 	}

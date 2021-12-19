@@ -147,6 +147,20 @@ func (r *Raft) handleSnapshot(m pb.Message) {
 	r.RaftLog.applied = meta.Index
 	r.RaftLog.stabled = meta.Index
 
+	if len(r.RaftLog.entries) > 0 {
+		if meta.Index > r.RaftLog.LastIndex() {
+			r.RaftLog.entries = nil
+		} else if meta.Index >= r.RaftLog.FirstIndex() {
+			r.RaftLog.entries = r.RaftLog.entries[meta.Index - r.RaftLog.FirstIndex():]
+		}
+	} else {
+		r.RaftLog.entries = append(r.RaftLog.entries, pb.Entry{
+			EntryType: pb.EntryType_EntryNormal,
+			Term:      meta.Term,
+			Index:     meta.Index,
+		})
+	}
+
 	r.Prs = make(map[uint64]*Progress)
 	for _, id := range meta.ConfState.Nodes {
 		r.Prs[id] = &Progress{}
