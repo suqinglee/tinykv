@@ -136,7 +136,21 @@ func (r *Raft) handleRequestVoteResponse(m pb.Message) {
 }
 
 func (r *Raft) handleSnapshot(m pb.Message) {
+	meta := m.Snapshot.Metadata
+	if meta.Term < r.Term || meta.Index <= r.RaftLog.committed {
+		return
+	}
+	r.becomeFollower(meta.Term, m.From)
 
+	r.RaftLog.committed = meta.Index
+	r.RaftLog.pendingSnapshot = m.Snapshot
+	r.RaftLog.applied = meta.Index
+	r.RaftLog.stabled = meta.Index
+
+	r.Prs = make(map[uint64]*Progress)
+	for _, id := range meta.ConfState.Nodes {
+		r.Prs[id] = &Progress{}
+	}
 }
 
 func (r *Raft) handleHeartbeat(m pb.Message) {

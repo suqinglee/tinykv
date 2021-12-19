@@ -82,6 +82,7 @@ func NewRawNode(config *Config) (*RawNode, error) {
 	}
 	rn.hardState = hardState(rn.Raft)
 	rn.softState = softState(rn.Raft)
+	rn.Raft.RaftLog.applied = rn.Raft.RaftLog.FirstIndex() - 1
 	return rn, nil
 }
 
@@ -170,15 +171,17 @@ func (rn *RawNode) Ready() Ready {
 	} else {
 		rn.softState = softState
 	}
-	msgs := rn.Raft.msgs
-	//rn.Raft.msgs = nil
-	return Ready{
+	ready := Ready{
 		SoftState: softState,
 		HardState: hardState,
 		Entries: rn.Raft.RaftLog.unstableEntries(),
 		CommittedEntries: rn.Raft.RaftLog.nextEnts(),
-		Messages: msgs,
 	}
+	ready.Messages = rn.Raft.msgs
+	if !IsEmptySnap(rn.Raft.RaftLog.pendingSnapshot) {
+		ready.Snapshot = *rn.Raft.RaftLog.pendingSnapshot
+	}
+	return ready
 }
 
 // HasReady called when RawNode user need to check if any Ready pending.
@@ -201,6 +204,9 @@ func (rn *RawNode) HasReady() bool {
 	if len(rn.Raft.msgs) > 0 {
 		return true
 	}
+	if !IsEmptySnap(rn.Raft.RaftLog.pendingSnapshot) {
+		return true
+	}
 	return false
 }
 
@@ -215,6 +221,8 @@ func (rn *RawNode) Advance(rd Ready) {
 		rn.Raft.RaftLog.applied = rd.CommittedEntries[len(rd.CommittedEntries)-1].Index
 	}
 	rn.Raft.msgs = nil
+	rn.Raft.RaftLog.pendingSnapshot = nil
+	rn.Raft.RaftLog.maybeCompact()
 }
 
 // GetProgress return the Progress of this node and its peers, if this

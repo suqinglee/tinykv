@@ -8,17 +8,28 @@ import (
 // current commit index to the given peer. Returns true if a message was sent.
 func (r *Raft) sendAppend(to uint64) {
 	msg := pb.Message{
-		MsgType: pb.MessageType_MsgAppend,
 		To: to,
 		From: r.id,
 		Term: r.Term,
 		Index: r.Prs[to].Next - 1,
 		Commit: r.RaftLog.committed,
 	}
-	msg.LogTerm, _ = r.RaftLog.Term(msg.Index)
-	for i := r.Prs[to].Next; i >= r.RaftLog.FirstIndex() && i <= r.RaftLog.LastIndex(); i++ {
-		j := i - r.RaftLog.FirstIndex()
-		msg.Entries = append(msg.Entries, &r.RaftLog.entries[j])
+	var err error
+	msg.LogTerm, err = r.RaftLog.Term(msg.Index)
+	if err == ErrCompacted || err == ErrUnavailable && r.RaftLog.pendingSnapshot != nil {
+		if IsEmptySnap(r.RaftLog.pendingSnapshot) {
+			snapshot, _ := r.RaftLog.storage.Snapshot()
+			msg.Snapshot = &snapshot
+		} else {
+			msg.Snapshot = r.RaftLog.pendingSnapshot
+		}
+		msg.MsgType = pb.MessageType_MsgSnapshot
+	} else {
+		for i := r.Prs[to].Next; i >= r.RaftLog.FirstIndex() && i <= r.RaftLog.LastIndex(); i++ {
+			j := i - r.RaftLog.FirstIndex()
+			msg.Entries = append(msg.Entries, &r.RaftLog.entries[j])
+		}
+		msg.MsgType = pb.MessageType_MsgAppend
 	}
 	r.msgs = append(r.msgs, msg)
 }
