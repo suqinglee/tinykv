@@ -15,7 +15,6 @@
 package raft
 
 import (
-	"errors"
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
 )
 
@@ -130,12 +129,26 @@ func (l *RaftLog) FirstIndex() uint64 {
 // Term return the term of the entry in the given index
 func (l *RaftLog) Term(i uint64) (uint64, error) {
 	// Your Code Here (2A).
+	if !IsEmptySnap(l.pendingSnapshot) && i == l.pendingSnapshot.Metadata.Index {
+		return l.pendingSnapshot.Metadata.Term, nil
+	}
 	if len(l.entries) == 0 || i < l.FirstIndex() {
-		return l.storage.Term(i)
+		term, err := l.storage.Term(i)
+		if err == ErrUnavailable && !IsEmptySnap(l.pendingSnapshot) {
+			return term, ErrCompacted
+		}
+		return term, err
 	}
 	j := i - l.FirstIndex()
 	if j >= uint64(len(l.entries)) {
-		return 0, errors.New("out of range")
+		return 0, ErrUnavailable
 	}
 	return l.entries[j].Term, nil
+}
+
+func (l *RaftLog) Snapshot() (pb.Snapshot, error) {
+	if !IsEmptySnap(l.pendingSnapshot) {
+		return *l.pendingSnapshot, nil
+	}
+	return l.storage.Snapshot()
 }

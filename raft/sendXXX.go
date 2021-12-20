@@ -16,16 +16,12 @@ func (r *Raft) sendAppend(to uint64) {
 	}
 	var err error
 	msg.LogTerm, err = r.RaftLog.Term(msg.Index)
-	if err == ErrCompacted || err == ErrUnavailable && r.RaftLog.pendingSnapshot != nil {
-		if IsEmptySnap(r.RaftLog.pendingSnapshot) {
-			snapshot, err := r.RaftLog.storage.Snapshot()
-			if err != nil {
-				return
-			}
-			msg.Snapshot = &snapshot
-		} else {
-			msg.Snapshot = r.RaftLog.pendingSnapshot
+	if err == ErrCompacted {
+		snapshot, err := r.RaftLog.Snapshot()
+		if err != nil {
+			return
 		}
+		msg.Snapshot = &snapshot
 		msg.MsgType = pb.MessageType_MsgSnapshot
 	} else {
 		for i := r.Prs[to].Next; i >= r.RaftLog.FirstIndex() && i <= r.RaftLog.LastIndex(); i++ {

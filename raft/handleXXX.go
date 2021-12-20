@@ -137,29 +137,16 @@ func (r *Raft) handleRequestVoteResponse(m pb.Message) {
 
 func (r *Raft) handleSnapshot(m pb.Message) {
 	meta := m.Snapshot.Metadata
-	if meta.Term < r.Term || meta.Index <= r.RaftLog.committed {
+	if m.Term < r.Term || meta.Index <= r.RaftLog.committed {
 		return
 	}
-	r.becomeFollower(meta.Term, m.From)
+	r.becomeFollower(m.Term, m.From)
 
 	r.RaftLog.committed = meta.Index
 	r.RaftLog.pendingSnapshot = m.Snapshot
 	r.RaftLog.applied = meta.Index
 	r.RaftLog.stabled = meta.Index
-
-	if len(r.RaftLog.entries) > 0 {
-		if meta.Index > r.RaftLog.LastIndex() {
-			r.RaftLog.entries = nil
-		} else if meta.Index >= r.RaftLog.FirstIndex() {
-			r.RaftLog.entries = r.RaftLog.entries[meta.Index - r.RaftLog.FirstIndex():]
-		}
-	} else {
-		r.RaftLog.entries = append(r.RaftLog.entries, pb.Entry{
-			EntryType: pb.EntryType_EntryNormal,
-			Term:      meta.Term,
-			Index:     meta.Index,
-		})
-	}
+	r.RaftLog.entries = nil
 
 	r.Prs = make(map[uint64]*Progress)
 	for _, id := range meta.ConfState.Nodes {
